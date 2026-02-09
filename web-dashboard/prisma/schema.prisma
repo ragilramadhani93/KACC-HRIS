@@ -1,0 +1,55 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+  // url is managed by prisma.config.ts
+}
+
+model Employee {
+  id          String       @id @default(cuid())
+  userCode    String       @unique // e.g., EMP001
+  name        String
+  department  String?
+  photoUrl    String?      @default("") // URL to the registered face photo
+  attendances Attendance[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Attendance {
+  id            String    @id @default(cuid())
+  employeeId    String
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  clockInTime   DateTime
+  clockOutTime  DateTime?
+  photoUrl      String? // Snapshot taken during clock in
+  status        String    @default("ON_TIME") // ON_TIME, LATE
+  lateDuration  Int       @default(0) // In minutes
+  workDuration  Int       @default(0) // In minutes (calculated on clock out)
+  latitude      Float?    // GPS latitude on clock in
+  longitude     Float?    // GPS longitude on clock in
+  locationName  String?   // Optional: address or location name
+  outletId      String?   // Clock point where employee clocked in
+  outlet        Outlet?   @relation(fields: [outletId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Outlet {
+  id          String       @id @default(cuid())
+  name        String       // e.g., "Kantor Pusat", "Cabang Bandung"
+  address     String?
+  latitude    Float
+  longitude   Float
+  radius      Int          @default(100) // Allowed radius in meters
+  isActive    Boolean      @default(true)
+  attendances Attendance[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
