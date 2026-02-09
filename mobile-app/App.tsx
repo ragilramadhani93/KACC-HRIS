@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Button, StyleSheet, Text, TouchableOpacity, View, Modal, ActivityIndicator, Alert } from 'react-native';
 
 // Backend API URL - update this IP if your network changes
-const API_URL = "http://10.11.15.159:3000/api/attendance/scan";
+const API_URL = "https://kacc-hris-ggvc.vercel.app/api/attendance/scan";
 
 export default function App() {
   const [facing, setFacing] = useState<CameraType>('front');
