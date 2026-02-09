@@ -4,7 +4,9 @@ import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
 // Construct connection URL for Turso if credentials exist
-let dbUrl = process.env.DATABASE_URL;
+// Fallback to local dev.db to prevent build failure on Vercel if env vars are missing during build step
+let dbUrl = process.env.DATABASE_URL || "file:./dev.db";
+
 if (process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN) {
   // Append authToken to URL if using libsql protocol
   // Note: Prisma CLI might need "libsql://...?authToken=..." format
@@ -19,10 +21,6 @@ if (process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN) {
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
-  // Remove migrations config as we are using db push for now
-  // migrations: {
-  //   path: "prisma/migrations",
-  // },
   datasource: {
     // Prisma config expects url string
     url: dbUrl,
