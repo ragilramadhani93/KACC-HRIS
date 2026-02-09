@@ -9,6 +9,7 @@ const prismaClientSingleton = () => {
             url: process.env.TURSO_DATABASE_URL,
             authToken: process.env.TURSO_AUTH_TOKEN,
         });
+        // @ts-ignore - Type mismatch workaround for PrismaLibSql adapter
         const adapter = new PrismaLibSql(libsql);
         return new PrismaClient({ adapter });
     } else {
