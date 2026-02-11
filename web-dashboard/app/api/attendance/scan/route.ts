@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// OpenAI client - initialized lazily in handler
-let openai: OpenAI | null = null;
+// Gemini client - initialized lazily
+let genAI: GoogleGenerativeAI | null = null;
 
-function getOpenAI() {
-    if (!openai) {
-        if (!process.env.OPENAI_API_KEY) {
-            throw new Error('OPENAI_API_KEY environment variable is required');
+function getGemini() {
+    if (!genAI) {
+        if (!process.env.GEMINI_API_KEY) {
+            throw new Error('GEMINI_API_KEY environment variable is required');
         }
-        openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     }
-    return openai;
+    return genAI;
 }
 
 // Haversine formula to calculate distance between two GPS coordinates in meters
@@ -57,11 +57,21 @@ async function findNearestOutlet(
 
         if (distance <= outlet.radius) {
             matchedOutlet = { id: outlet.id, name: outlet.name, distance: Math.round(distance) };
-            break; // Found a match, no need to continue
+            break;
         }
     }
 
     return { match: matchedOutlet, nearest: nearestOutlet };
+}
+
+// Extract raw base64 data from data URL
+function extractBase64(dataUrl: string): { mimeType: string; data: string } {
+    const match = dataUrl.match(/^data:(.+?);base64,(.+)$/);
+    if (match) {
+        return { mimeType: match[1], data: match[2] };
+    }
+    // If not a data URL, assume it's raw base64 JPEG
+    return { mimeType: 'image/jpeg', data: dataUrl };
 }
 
 export async function POST(request: Request) {
@@ -72,14 +82,14 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Image is required' }, { status: 400 });
         }
 
-        // 1. Fetch all employees to use as candidates
+        // 1. Fetch all employees
         const employees = await prisma.employee.findMany();
 
         if (employees.length === 0) {
             return NextResponse.json({ error: 'No employees found in database' }, { status: 404 });
         }
 
-        // 1.5 Geofence validation - check if location is within any outlet
+        // 1.5 Geofence validation
         let matchedOutletId: string | null = null;
         let outletName: string | null = null;
 
@@ -101,60 +111,68 @@ export async function POST(request: Request) {
             outletName = match.name;
         }
 
-        // 2. Construct Prompt for GPT-4o
-        // We send the "Target" (scanned) image and "Candidate" images.
-        type ContentItem =
-            | { type: 'text'; text: string }
-            | { type: 'image_url'; image_url: { url: string } };
+        // 2. Build Gemini content with images
+        const model = getGemini().getGenerativeModel({
+            model: "gemini-1.5-flash",
+            generationConfig: {
+                responseMimeType: "application/json",
+            },
+        });
 
-        const content: ContentItem[] = [
+        // Extract target image base64
+        const targetImage = extractBase64(image);
+
+        // Build parts array for Gemini
+        const parts: any[] = [
             {
-                type: "text",
-                text: `You are a Face Recognition system. I will provide a target face image and a list of ${employees.filter(e => e.photoUrl).length} candidate faces with their IDs. Your job is to identify which candidate matches the target face. Compare facial features like face shape, eyes, nose, mouth, eyebrows, and overall appearance. Even if the lighting, angle, or image quality differs, try your best to match. Return a JSON object: { "match": true, "employeeId": "...", "confidence": 0.85, "reason": "..." } if you find a match with at least 40% confidence. If no match at all, return { "match": false, "confidence": 0, "reason": "..." }. Be lenient - if the person looks similar, consider it a match.`
+                text: `You are a Face Recognition system. I will provide a target face image and ${employees.filter(e => e.photoUrl).length} candidate face(s) with their IDs. 
+
+Your job is to identify which candidate matches the target face. Compare facial features like face shape, eyes, nose, mouth, eyebrows, and overall appearance. Even if the lighting, angle, or image quality differs, try your best to match.
+
+Return a JSON object:
+- If match found (at least 40% confidence): { "match": true, "employeeId": "...", "confidence": 0.85, "reason": "..." }
+- If no match: { "match": false, "confidence": 0, "reason": "..." }
+
+Be lenient - if the person looks similar, consider it a match.
+
+TARGET FACE (photo taken from mobile camera):`
             },
             {
-                type: "text",
-                text: "TARGET FACE (photo taken from mobile camera):"
+                inlineData: {
+                    mimeType: targetImage.mimeType,
+                    data: targetImage.data,
+                }
             },
-            {
-                type: "image_url",
-                image_url: { url: image }
-            }
         ];
 
+        // Add candidate employees
         employees.forEach(emp => {
             if (emp.photoUrl) {
-                content.push({
-                    type: "text",
-                    text: `CANDIDATE ID: ${emp.id}`
+                const empImage = extractBase64(emp.photoUrl);
+                parts.push({
+                    text: `CANDIDATE ID: ${emp.id} (Name: ${emp.name})`
                 });
-                content.push({
-                    type: "image_url",
-                    image_url: { url: emp.photoUrl }
+                parts.push({
+                    inlineData: {
+                        mimeType: empImage.mimeType,
+                        data: empImage.data,
+                    }
                 });
             }
         });
 
-        // 3. Call OpenAI API
-        const response = await getOpenAI().chat.completions.create({
-            model: "gpt-4o",
-            messages: [
-                {
-                    role: "user",
-                    content: content as any,
-                },
-            ],
-            response_format: { type: "json_object" },
-        });
+        // 3. Call Gemini API
+        console.log("Calling Gemini API for face recognition...");
+        const response = await model.generateContent(parts);
+        const responseText = response.response.text();
+        console.log("Gemini Response:", responseText);
 
-        const result = JSON.parse(response.choices[0].message.content || "{}");
-        console.log("Recognition Result:", JSON.stringify(result));
+        const result = JSON.parse(responseText);
 
         if (result.match && result.employeeId) {
             const employeeId = result.employeeId;
 
             // 4. Handle Clock In/Out logic
-            // Find the most recent attendance for this employee
             const lastAttendance = await prisma.attendance.findFirst({
                 where: { employeeId },
                 orderBy: { createdAt: 'desc' },
@@ -164,7 +182,6 @@ export async function POST(request: Request) {
             let action = 'CLOCK_IN';
             let message = 'Welcome!';
 
-            // If last attendance exists and has NO clockOutTime, then we CLOCK OUT
             if (lastAttendance && !lastAttendance.clockOutTime) {
                 action = 'CLOCK_OUT';
                 message = 'Goodbye!';
@@ -181,17 +198,13 @@ export async function POST(request: Request) {
                     },
                 });
             } else {
-                // CLOCK IN
-                // Check for lateness (Example: Work starts at 09:00)
-                // Simple logic: If time > 09:15, assume Late.
-                // For dynamic shifts, would need Employee settings.
+                // CLOCK IN - Check for lateness
                 const workStartTime = new Date();
-                workStartTime.setHours(9, 0, 0, 0); // 9:00 AM
+                workStartTime.setHours(9, 0, 0, 0);
 
                 let status = 'ON_TIME';
                 let lateDuration = 0;
 
-                // Only count late if it's the same day and after 9:15
                 if (now.getDate() === workStartTime.getDate() && now > workStartTime) {
                     const diffMs = now.getTime() - workStartTime.getTime();
                     const diffMinutes = Math.floor(diffMs / 60000);
@@ -216,7 +229,6 @@ export async function POST(request: Request) {
                 });
             }
 
-            // Fetch employee name for feedback
             const employee = employees.find(e => e.id === employeeId);
 
             return NextResponse.json({
@@ -224,15 +236,24 @@ export async function POST(request: Request) {
                 action,
                 employeeName: employee?.name,
                 timestamp: now.toISOString(),
-                message
+                message,
+                confidence: result.confidence,
             });
 
         } else {
-            return NextResponse.json({ success: false, message: 'Face not recognized', confidence: result.confidence || 0, reason: result.reason || 'No match found' }, { status: 401 });
+            return NextResponse.json({
+                success: false,
+                message: 'Face not recognized',
+                confidence: result.confidence || 0,
+                reason: result.reason || 'No match found'
+            }, { status: 401 });
         }
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Scan Error:", error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({
+            error: 'Internal Server Error',
+            detail: error.message || 'Unknown error'
+        }, { status: 500 });
     }
 }
