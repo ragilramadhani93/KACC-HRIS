@@ -110,11 +110,11 @@ export async function POST(request: Request) {
         const content: ContentItem[] = [
             {
                 type: "text",
-                text: "You are a Face Recognition system. I will provide a target face image and a list of candidate faces with their IDs. Identify which candidate matches the target face. Return the ID of the matched candidate in a JSON object: { \"match\": true, \"employeeId\": \"...\" }. If no match is found with high confidence, return { \"match\": false }."
+                text: `You are a Face Recognition system. I will provide a target face image and a list of ${employees.filter(e => e.photoUrl).length} candidate faces with their IDs. Your job is to identify which candidate matches the target face. Compare facial features like face shape, eyes, nose, mouth, eyebrows, and overall appearance. Even if the lighting, angle, or image quality differs, try your best to match. Return a JSON object: { "match": true, "employeeId": "...", "confidence": 0.85, "reason": "..." } if you find a match with at least 40% confidence. If no match at all, return { "match": false, "confidence": 0, "reason": "..." }. Be lenient - if the person looks similar, consider it a match.`
             },
             {
                 type: "text",
-                text: "TARGET FACE:"
+                text: "TARGET FACE (photo taken from mobile camera):"
             },
             {
                 type: "image_url",
@@ -148,7 +148,7 @@ export async function POST(request: Request) {
         });
 
         const result = JSON.parse(response.choices[0].message.content || "{}");
-        console.log("Recognition Result:", result);
+        console.log("Recognition Result:", JSON.stringify(result));
 
         if (result.match && result.employeeId) {
             const employeeId = result.employeeId;
@@ -228,7 +228,7 @@ export async function POST(request: Request) {
             });
 
         } else {
-            return NextResponse.json({ success: false, message: 'Face not recognized' }, { status: 401 });
+            return NextResponse.json({ success: false, message: 'Face not recognized', confidence: result.confidence || 0, reason: result.reason || 'No match found' }, { status: 401 });
         }
 
     } catch (error) {
