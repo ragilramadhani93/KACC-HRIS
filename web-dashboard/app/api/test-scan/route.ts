@@ -1,58 +1,46 @@
 import { prisma } from '@/lib/prisma';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
+import { loadModels } from '@/lib/face-api';
+import path from 'path';
+import fs from 'fs';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+    const status: any = {
+        database: 'untested',
+        faceApi: 'untested',
+        env: process.env.NODE_ENV,
+        cwd: process.cwd(),
+    };
+
     try {
-        // Check Gemini key
-        const hasGeminiKey = !!process.env.GEMINI_API_KEY;
-        const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
-        const geminiKeyPrefix = process.env.GEMINI_API_KEY?.substring(0, 10) || 'not set';
+        // 1. Check Database
+        const employees = await prisma.employee.count();
+        status.database = `OK (${employees} employees)`;
 
-        // Get employees
-        const employees = await prisma.employee.findMany();
-        const employeeSummary = employees.map(e => ({
-            id: e.id,
-            name: e.name,
-            hasPhoto: !!e.photoUrl,
-            photoLength: e.photoUrl?.length || 0,
-        }));
+        // 2. Check FaceAPI Models
+        const modelPath = path.join(process.cwd(), 'public/models');
+        status.modelPath = modelPath;
 
-        // Test Gemini API
-        let geminiStatus = 'untested';
-        let geminiError = '';
-
-        if (hasGeminiKey) {
-            try {
-                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-                const result = await model.generateContent('Reply with just: OK');
-                geminiStatus = result.response.text().trim();
-            } catch (err: any) {
-                geminiStatus = 'FAILED';
-                geminiError = err.message || 'Unknown error';
+        try {
+            // Check if directory exists
+            if (fs.existsSync(modelPath)) {
+                const files = fs.readdirSync(modelPath);
+                status.modelFiles = files;
+            } else {
+                status.modelFiles = 'DIRECTORY_NOT_FOUND';
             }
-        } else {
-            geminiStatus = 'NO_API_KEY';
+
+            const start = Date.now();
+            await loadModels();
+            status.faceApi = `OK (Loaded in ${Date.now() - start}ms)`;
+        } catch (err: any) {
+            status.faceApi = `FAILED: ${err.message}`;
         }
 
-        return NextResponse.json({
-            status: 'OK',
-            employees: employeeSummary,
-            employeeCount: employees.length,
-            gemini: {
-                hasKey: hasGeminiKey,
-                keyPrefix: geminiKeyPrefix,
-                status: geminiStatus,
-                error: geminiError,
-            },
-            openai: {
-                hasKey: hasOpenAIKey,
-            },
-        });
+        return NextResponse.json(status);
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ ...status, error: error.message }, { status: 500 });
     }
 }
