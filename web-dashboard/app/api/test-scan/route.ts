@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
-import { loadModels } from '@/lib/face-api';
+import { loadModels, computeDescriptor } from '@/lib/face-api';
 import path from 'path';
 import fs from 'fs';
 
@@ -10,6 +10,7 @@ export async function GET() {
     const status: any = {
         database: 'untested',
         faceApi: 'untested',
+        computeTest: 'untested',
         env: process.env.NODE_ENV,
         cwd: process.cwd(),
     };
@@ -37,6 +38,32 @@ export async function GET() {
             status.faceApi = `OK (Loaded in ${Date.now() - start}ms)`;
         } catch (err: any) {
             status.faceApi = `FAILED: ${err.message}`;
+            return NextResponse.json(status);
+        }
+
+        // 3. Test Compute Descriptor (using first employee with photo)
+        const emp = await prisma.employee.findFirst({
+            where: { photoUrl: { not: '' } },
+            select: { id: true, name: true, photoUrl: true }
+        });
+
+        if (emp && emp.photoUrl) {
+            try {
+                const startCompute = Date.now();
+                // We're re-using the computeDescriptor logic which uses face-api + canvas internally
+                const descriptor = await computeDescriptor(emp.photoUrl);
+
+                if (descriptor) {
+                    status.computeTest = `OK (Descriptor length: ${descriptor.length}, Time: ${Date.now() - startCompute}ms)`;
+                } else {
+                    status.computeTest = `OK (No face detected in test photo for ${emp.name}, but function ran)`;
+                }
+            } catch (err: any) {
+                status.computeTest = `FAILED: ${err.message}`;
+                console.error('Compute Test Failed:', err);
+            }
+        } else {
+            status.computeTest = 'SKIPPED (No employee with photo found)';
         }
 
         return NextResponse.json(status);
