@@ -1,26 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { loadModels, computeDescriptor, euclideanDistance, bufferFromBase64, faceapi, loadImage } from '@/lib/face-api';
 
-// Gemini client - initialized lazily
-let genAI: GoogleGenerativeAI | null = null;
-
-function getGemini() {
-    if (!genAI) {
-        if (!process.env.GEMINI_API_KEY) {
-            throw new Error('GEMINI_API_KEY environment variable is required');
-        }
-        genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    }
-    return genAI;
-}
-
-// Haversine formula to calculate distance between two GPS coordinates in meters
+// Haversine formula
 function getDistanceInMeters(
     lat1: number, lon1: number,
     lat2: number, lon2: number
 ): number {
-    const R = 6371000; // Earth's radius in meters
+    const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a =
@@ -31,7 +18,6 @@ function getDistanceInMeters(
     return R * c;
 }
 
-// Find outlet that employee is within radius of
 type OutletMatch = { id: string; name: string; distance: number } | null;
 
 async function findNearestOutlet(
@@ -64,38 +50,20 @@ async function findNearestOutlet(
     return { match: matchedOutlet, nearest: nearestOutlet };
 }
 
-// Extract raw base64 data from data URL
-function extractBase64(dataUrl: string): { mimeType: string; data: string } {
-    const match = dataUrl.match(/^data:(.+?);base64,(.+)$/);
-    if (match) {
-        return { mimeType: match[1], data: match[2] };
-    }
-    // If not a data URL, assume it's raw base64 JPEG
-    return { mimeType: 'image/jpeg', data: dataUrl };
-}
-
 export async function POST(request: Request) {
     try {
+        await loadModels();
+
         const { image, latitude, longitude, locationName } = await request.json();
 
         if (!image) {
             return NextResponse.json({ error: 'Image is required' }, { status: 400 });
         }
 
-        // 1. Fetch all employees
-        const employees = await prisma.employee.findMany();
-
-        if (employees.length === 0) {
-            return NextResponse.json({ error: 'No employees found in database' }, { status: 404 });
-        }
-
-        // 1.5 Geofence validation
+        // 1. Geofence Check
         let matchedOutletId: string | null = null;
-        let outletName: string | null = null;
-
         if (latitude !== undefined && longitude !== undefined) {
             const { match, nearest } = await findNearestOutlet(latitude, longitude);
-
             if (!match) {
                 const nearestInfo = nearest
                     ? `Outlet terdekat: ${nearest.name} (${nearest.distance}m)`
@@ -106,73 +74,71 @@ export async function POST(request: Request) {
                     message: `Anda berada di luar jangkauan outlet. ${nearestInfo}`,
                 }, { status: 403 });
             }
-
             matchedOutletId = match.id;
-            outletName = match.name;
         }
 
-        // 2. Build Gemini content with images
-        const model = getGemini().getGenerativeModel({
-            model: "gemini-2.0-flash",
-            generationConfig: {
-                responseMimeType: "application/json",
+        // 2. Detect face in scanned image
+        const targetDescriptorArray = await computeDescriptor(image);
+
+        if (!targetDescriptorArray) {
+            return NextResponse.json({
+                success: false,
+                message: 'No face detected in the photo. Please try again.',
+                confidence: 0
+            }, { status: 400 });
+        }
+
+        // 3. Compare against CACHED descriptors (fast path!)
+        const employees = await prisma.employee.findMany({
+            where: {
+                faceDescriptor: { not: null },
             },
-        });
-
-        // Extract target image base64
-        const targetImage = extractBase64(image);
-
-        // Build parts array for Gemini
-        const parts: any[] = [
-            {
-                text: `You are a Face Recognition system. I will provide a target face image and ${employees.filter(e => e.photoUrl).length} candidate face(s) with their IDs. 
-
-Your job is to identify which candidate matches the target face. Compare facial features like face shape, eyes, nose, mouth, eyebrows, and overall appearance. Even if the lighting, angle, or image quality differs, try your best to match.
-
-Return a JSON object:
-- If match found (at least 40% confidence): { "match": true, "employeeId": "...", "confidence": 0.85, "reason": "..." }
-- If no match: { "match": false, "confidence": 0, "reason": "..." }
-
-Be lenient - if the person looks similar, consider it a match.
-
-TARGET FACE (photo taken from mobile camera):`
-            },
-            {
-                inlineData: {
-                    mimeType: targetImage.mimeType,
-                    data: targetImage.data,
-                }
-            },
-        ];
-
-        // Add candidate employees
-        employees.forEach(emp => {
-            if (emp.photoUrl) {
-                const empImage = extractBase64(emp.photoUrl);
-                parts.push({
-                    text: `CANDIDATE ID: ${emp.id} (Name: ${emp.name})`
-                });
-                parts.push({
-                    inlineData: {
-                        mimeType: empImage.mimeType,
-                        data: empImage.data,
-                    }
-                });
+            select: {
+                id: true,
+                name: true,
+                faceDescriptor: true,
             }
         });
 
-        // 3. Call Gemini API
-        console.log("Calling Gemini API for face recognition...");
-        const response = await model.generateContent(parts);
-        const responseText = response.response.text();
-        console.log("Gemini Response:", responseText);
+        let bestMatch = {
+            employeeId: null as string | null,
+            distance: Infinity,
+            name: ""
+        };
 
-        const result = JSON.parse(responseText);
+        const MATCH_THRESHOLD = 0.55;
 
-        if (result.match && result.employeeId) {
-            const employeeId = result.employeeId;
+        console.log(`Comparing against ${employees.length} employees (cached descriptors)...`);
+        const compareStart = Date.now();
 
-            // 4. Handle Clock In/Out logic
+        for (const emp of employees) {
+            if (!emp.faceDescriptor) continue;
+
+            try {
+                const empDescriptor: number[] = JSON.parse(emp.faceDescriptor);
+                const distance = euclideanDistance(targetDescriptorArray, empDescriptor);
+
+                if (distance < bestMatch.distance) {
+                    bestMatch = {
+                        employeeId: emp.id,
+                        distance: distance,
+                        name: emp.name
+                    };
+                }
+            } catch (err) {
+                console.error(`Error comparing descriptor for ${emp.name}:`, err);
+            }
+        }
+
+        const compareTime = Date.now() - compareStart;
+        console.log(`Descriptor comparison took ${compareTime}ms for ${employees.length} employees`);
+
+        // 4. Determine Result
+        if (bestMatch.distance < MATCH_THRESHOLD && bestMatch.employeeId) {
+            const employeeId = bestMatch.employeeId;
+            const confidence = 1 - bestMatch.distance;
+
+            // Handle Clock In/Out logic
             const lastAttendance = await prisma.attendance.findFirst({
                 where: { employeeId },
                 orderBy: { createdAt: 'desc' },
@@ -198,7 +164,7 @@ TARGET FACE (photo taken from mobile camera):`
                     },
                 });
             } else {
-                // CLOCK IN - Check for lateness
+                // CLOCK IN
                 const workStartTime = new Date();
                 workStartTime.setHours(9, 0, 0, 0);
 
@@ -229,23 +195,21 @@ TARGET FACE (photo taken from mobile camera):`
                 });
             }
 
-            const employee = employees.find(e => e.id === employeeId);
-
             return NextResponse.json({
                 success: true,
                 action,
-                employeeName: employee?.name,
+                employeeName: bestMatch.name,
                 timestamp: now.toISOString(),
                 message,
-                confidence: result.confidence,
+                confidence: parseFloat(confidence.toFixed(2)),
             });
 
         } else {
             return NextResponse.json({
                 success: false,
                 message: 'Face not recognized',
-                confidence: result.confidence || 0,
-                reason: result.reason || 'No match found'
+                confidence: bestMatch.distance === Infinity ? 0 : parseFloat((1 - bestMatch.distance).toFixed(2)),
+                reason: `Best match distance ${bestMatch.distance.toFixed(2)} (Threshold: ${MATCH_THRESHOLD})`
             }, { status: 401 });
         }
 

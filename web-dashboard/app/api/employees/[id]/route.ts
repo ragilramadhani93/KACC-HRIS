@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { computeDescriptor } from '@/lib/face-api';
 
 interface RouteParams {
     params: Promise<{ id: string }>;
@@ -52,6 +53,29 @@ export async function PUT(request: Request, { params }: RouteParams) {
             }
         }
 
+        // Recompute face descriptor if photo changed
+        let faceDescriptor: string | null | undefined = undefined; // undefined = don't update
+        if (photoUrl !== undefined && photoUrl !== existing.photoUrl) {
+            if (photoUrl) {
+                try {
+                    const descriptor = await computeDescriptor(photoUrl);
+                    if (descriptor) {
+                        faceDescriptor = JSON.stringify(descriptor);
+                        console.log(`Face descriptor recomputed for employee ${id}`);
+                    } else {
+                        faceDescriptor = null; // No face detected, clear descriptor
+                        console.warn(`No face detected in updated photo for employee ${id}`);
+                    }
+                } catch (err) {
+                    console.error(`Failed to recompute descriptor for employee ${id}:`, err);
+                    // Keep existing descriptor
+                }
+            } else {
+                // Photo removed, clear descriptor
+                faceDescriptor = null;
+            }
+        }
+
         const employee = await prisma.employee.update({
             where: { id },
             data: {
@@ -59,6 +83,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
                 ...(name !== undefined && { name }),
                 ...(department !== undefined && { department }),
                 ...(photoUrl !== undefined && { photoUrl }),
+                ...(faceDescriptor !== undefined && { faceDescriptor }),
             },
         });
 
