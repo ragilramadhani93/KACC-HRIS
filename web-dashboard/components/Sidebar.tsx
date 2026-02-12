@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Clock, MapPin } from "lucide-react";
+import { LayoutDashboard, Users, Clock, MapPin, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { logout } from "@/lib/actions";
+
 
 const routes = [
     {
@@ -59,6 +61,18 @@ export function Sidebar() {
                     ))}
                 </div>
             </div>
+            <div className="px-3 pb-4">
+                <button
+                    onClick={() => logout()}
+                    className="text-zinc-400 text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:text-white hover:bg-white/10 rounded-lg transition"
+                >
+                    <div className="flex items-center flex-1">
+                        <LogOut className="h-5 w-5 mr-3 text-red-500" />
+                        Logout
+                    </div>
+                </button>
+            </div>
         </div>
+
     );
 }

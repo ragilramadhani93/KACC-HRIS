@@ -10,7 +10,7 @@ interface AttendanceRecord {
     };
     clockInTime: Date;
     status: string;
-    lateDuration: number;
+    lateDuration: number | null;
 }
 
 interface RecentAttendanceProps {
