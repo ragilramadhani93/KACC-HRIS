@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@libsql/client": "^0.17.0",
+    "@libsql/client": "^0.8.0",
     "@napi-rs/canvas": "^0.1.91",
     "@prisma/adapter-libsql": "^5.22.0",
     "@prisma/client": "^5.22.0",
