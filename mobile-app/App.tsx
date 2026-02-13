@@ -1,5 +1,7 @@
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
+import * as ImageManipulator from 'expo-image-manipulator';
+
 import { useState, useRef, useEffect } from 'react';
 import { Button, StyleSheet, Text, TouchableOpacity, View, Modal, ActivityIndicator, Alert } from 'react-native';
 
@@ -65,17 +67,28 @@ export default function App() {
       }
 
       const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
-        quality: 0.5,
+        quality: 0.3,
       });
 
-      if (photo?.base64) {
-        const base64Img = `data:image/jpeg;base64,${photo.base64}`;
+      if (photo?.uri) {
+        // Resize image locally to < 500px to prevent timeout
+        const manipResult = await ImageManipulator.manipulateAsync(
+          photo.uri,
+          [{ resize: { width: 480 } }],
+          { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
 
-        // Send to Backend with location
+        const base64Img = `data:image/jpeg;base64,${manipResult.base64}`;
+
+
+        // Send to Backend with location and timeout
         try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
           const response = await fetch(API_URL, {
             method: 'POST',
+            signal: controller.signal,
             headers: {
               'Content-Type': 'application/json',
             },
@@ -85,6 +98,8 @@ export default function App() {
               longitude,
             }),
           });
+
+          clearTimeout(timeoutId);
 
           const data = await response.json();
 

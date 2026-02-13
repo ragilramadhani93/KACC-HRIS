@@ -1,0 +1,9 @@
+# EAS Build Ignore
+node_modules/
+android/
+ios/
+.expo/
+dist/
+web-build/
+*.apk
+*.aab
