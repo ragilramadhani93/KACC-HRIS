@@ -59,14 +59,35 @@ export function bufferFromBase64(base64: string): Buffer {
  * Returns null if no face is detected.
  */
 export async function computeDescriptor(base64: string): Promise<number[] | null> {
+    const startLoad = Date.now();
     await loadModels();
+    console.log(`Model check/load took ${Date.now() - startLoad}ms`);
 
     const buffer = bufferFromBase64(base64);
-    const img = await loadImage(buffer);
 
-    const detection = await faceapi.detectSingleFace(img as any)
+    // Resize image if too large (to speed up detection)
+    const originalImage = await loadImage(buffer);
+    const MAX_WIDTH = 640;
+
+    let processImage: any = originalImage;
+
+    if (originalImage.width > MAX_WIDTH) {
+        const scale = MAX_WIDTH / originalImage.width;
+        const newWidth = MAX_WIDTH;
+        const newHeight = originalImage.height * scale;
+
+        const c = new Canvas(newWidth, newHeight);
+        const ctx = c.getContext('2d');
+        ctx.drawImage(originalImage, 0, 0, newWidth, newHeight);
+        processImage = c;
+        console.log(`Image resized from ${originalImage.width}x${originalImage.height} to ${newWidth}x${newHeight}`);
+    }
+
+    const startDetect = Date.now();
+    const detection = await faceapi.detectSingleFace(processImage as any)
         .withFaceLandmarks()
         .withFaceDescriptor();
+    console.log(`Face detection took ${Date.now() - startDetect}ms`);
 
     if (!detection) return null;
 
