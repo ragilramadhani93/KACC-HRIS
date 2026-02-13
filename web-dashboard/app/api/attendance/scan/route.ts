@@ -161,7 +161,7 @@ export async function POST(request: Request) {
                     data: {
                         clockOutTime: now,
                         workDuration: durationMinutes,
-                    },
+                    } as any,
                 });
             } else {
                 // CLOCK IN
@@ -191,8 +191,9 @@ export async function POST(request: Request) {
                         longitude: longitude ?? null,
                         locationName: locationName ?? null,
                         outletId: matchedOutletId,
-                    },
+                    } as any,
                 });
+
             }
 
             return NextResponse.json({
@@ -216,8 +217,9 @@ export async function POST(request: Request) {
     } catch (error: any) {
         console.error("Scan Error:", error);
         return NextResponse.json({
-            error: 'Internal Server Error',
-            detail: error.message || 'Unknown error'
+            success: false,
+            message: `Server Error: ${error.message || 'Unknown error'}`,
+            detail: error.stack
         }, { status: 500 });
     }
 }
