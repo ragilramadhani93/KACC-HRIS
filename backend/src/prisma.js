@@ -1,3 +1,29 @@
+import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
+import { PrismaLibSQL } from "@prisma/adapter-libsql";
+import { createClient } from "@libsql/client";
 
-export const prisma = new PrismaClient();
+dotenv.config();
+
+export function createPrismaClient() {
+	const databaseUrl = process.env.DATABASE_URL;
+	const tursoAuthToken = process.env.TURSO_AUTH_TOKEN;
+
+	// Use the LibSQL adapter when the URL points to Turso/libsql.
+	if (databaseUrl?.startsWith("libsql://")) {
+		const client = createClient({
+			url: databaseUrl,
+			authToken: tursoAuthToken,
+		});
+		const adapter = new PrismaLibSQL(client);
+
+		// Prisma still validates the SQLite datasource URL even when an adapter is provided.
+		// Point it at a local SQLite placeholder while the adapter handles the real Turso connection.
+		process.env.DATABASE_URL = "file:./prisma/dev.db";
+		return new PrismaClient({ adapter });
+	}
+
+	return new PrismaClient();
+}
+
+export const prisma = createPrismaClient();
