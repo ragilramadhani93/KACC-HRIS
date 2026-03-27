@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("departments")
+}
+
+model User {
+  id                String           @id @default(cuid())
+  name              String
+  email             String           @unique
+  passwordHash      String           @map("password_hash")
+  role              String
+  departmentId      String?          @map("department_id")
+  department        Department?      @relation(fields: [departmentId], references: [id])
+  position          String?
+  hourlyRate        Decimal?         @map("hourly_rate")
+  avatarUrl         String?          @map("avatar_url")
+  fcmToken          String?          @map("fcm_token")
+  isActive          Boolean          @default(true) @map("is_active")
+  address           String?
+  phoneNumber       String?          @map("phone_number")
+  bank              String?
+  accountNumber     String?          @map("account_number")
+  emergencyContact  String?          @map("emergency_contact")
+  ktpPhotoUrl       String?          @map("ktp_photo_url")
+  timeEntries       TimeEntry[]
+  schedules         Schedule[]
+  timeOffRequests   TimeOffRequest[]
+  outletId          String?          @map("outlet_id")
+  outlet            Outlet?          @relation(fields: [outletId], references: [id])
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@map("users")
+}
+
+model TimeEntry {
+  id         String      @id @default(cuid())
+  userId     String      @map("user_id")
+  user       User        @relation(fields: [userId], references: [id])
+  clockIn    DateTime    @map("clock_in")
+  clockOut   DateTime?   @map("clock_out")
+  breakStart DateTime?   @map("break_start")
+  breakEnd   DateTime?   @map("break_end")
+  totalHours Decimal?    @map("total_hours")
+  selfieUrl  String?     @map("selfie_url")
+  latitude   Decimal?
+  longitude  Decimal?
+  address    String?
+  ipAddress  String?     @map("ip_address")
+  status     String      @default("PENDING")
+  notes      String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([userId, clockIn])
+  @@map("time_entries")
+}
+
+model Schedule {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  dayOfWeek Int      @map("day_of_week")
+  startTime String   @map("start_time")
+  endTime   String   @map("end_time")
+
+  @@index([userId, dayOfWeek])
+  @@map("schedules")
+}
+
+model TimeOffRequest {
+  id        String        @id @default(cuid())
+  userId    String        @map("user_id")
+  user      User          @relation(fields: [userId], references: [id])
+  startDate DateTime      @map("start_date")
+  endDate   DateTime      @map("end_date")
+  reason    String
+  status    String        @default("PENDING")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("time_off_requests")
+}
+
+model Outlet {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  address   String?
+ latitude  Decimal?
+ longitude Decimal?
+ radius    Int          @default(100) // in meters
+  isActive  Boolean      @default(true) @map("is_active")
+  users     User[]
+  shifts    OutletShift[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([name])
+  @@map("outlets")
+}
+
+model OutletShift {
+  id          String   @id @default(cuid())
+  outletId    String   @map("outlet_id")
+  outlet      Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  name        String
+  startTime   String   @map("start_time")
+  endTime     String   @map("end_time")
+  isOvernight Boolean  @default(false) @map("is_overnight")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([outletId])
+  @@map("outlet_shifts")
+}

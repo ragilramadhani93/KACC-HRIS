@@ -1,13 +1,14 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
+datasource db {
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
   // url is managed by prisma.config.ts or env
   url      = "file:./dev.db"
 }
@@ -16,55 +17,69 @@ model Employee {
   id          String       @id @default(cuid())
   userCode    String       @unique // e.g., EMP001
   name        String
-  department  String?
-  photoUrl    String?      @default("") // URL to the registered face photo
-  faceDescriptor String?   // JSON array of 128 floats from face-api.js
-  attendances Attendance[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-}
 
-model Attendance {
-  id             String    @id @default(cuid())
-  employeeId     String
-  clockInTime    DateTime
-  clockOutTime   DateTime?
-  status         String    @default("PRESENT") // PRESENT, LATE, ABSENT
-  lateDuration   Int?      // in minutes, nullable for non-late
-  photoUrl       String?   // Scan photo
-  location       String?   // Captured lat,long
-  locationName   String?
-  latitude       Float?
-  longitude      Float?
-  workDuration   Int?
-  outletId       String?
+  model User {
+    id            String   @id @default(cuid())
+    name          String
+    email         String   @unique
+    password_hash String
+    role          String   // 'admin' or 'employee'
+    department_id String?
+    position      String?
+    hourly_rate   Float?
+    avatar_url    String?
+    fcm_token     String?
+    is_active     Boolean  @default(true)
+    time_entries  TimeEntry[]
+    schedules     Schedule[]
+    time_off_requests TimeOffRequest[]
+    createdAt     DateTime @default(now())
+    updatedAt     DateTime @updatedAt
+  }
 
-  
-  employee       Employee  @relation(fields: [employeeId], references: [id])
-  outlet         Outlet?   @relation(fields: [outletId], references: [id])
+  model Department {
+    id   String  @id @default(cuid())
+    name String
+    users User[]
+  }
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-}
+  model TimeEntry {
+    id           String   @id @default(cuid())
+    user_id      String
+    clock_in     DateTime
+    clock_out    DateTime?
+    break_start  DateTime?
+    break_end    DateTime?
+    total_hours  Float?
+    selfie_url   String?
+    latitude     Float?
+    longitude    Float?
+    address      String?
+    ip_address   String?
+    status       String   // PRESENT, LATE, ABSENT, etc.
+    notes        String?
+    user         User     @relation(fields: [user_id], references: [id])
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
+  }
 
-model Admin {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  password  String   // Hashed password
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+  model Schedule {
+    id          String   @id @default(cuid())
+    user_id     String
+    day_of_week Int
+    start_time  DateTime
+    end_time    DateTime
+    user        User     @relation(fields: [user_id], references: [id])
+  }
 
-model Outlet {
-  id          String       @id @default(cuid())
-  name        String       // e.g., "Kantor Pusat", "Cabang Bandung"
-  address     String?
-  latitude    Float
-  longitude   Float
-  radius      Int          @default(100) // Allowed radius in meters
-  isActive    Boolean      @default(true)
-  attendances Attendance[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-}
+  model TimeOffRequest {
+    id         String   @id @default(cuid())
+    user_id    String
+    start_date DateTime
+    end_date   DateTime
+    reason     String?
+    status     String   // pending, approved, rejected
+    user       User     @relation(fields: [user_id], references: [id])
+    createdAt  DateTime @default(now())
+    updatedAt  DateTime @updatedAt
+  }

@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to capture a selfie during clock in.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to record where clock in and clock out happened."
+      }
     },
     "android": {
       "package": "com.hris.attendance",
@@ -36,6 +40,20 @@
       "eas": {
         "projectId": "cc9c7442-69de-4f6b-b282-b0143862554a"
       }
-    }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow this app to access the camera to capture a clock-in selfie."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow this app to access your location while you clock in or clock out."
+        }
+      ]
+    ]
   }
 }
