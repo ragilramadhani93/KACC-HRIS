@@ -4,9 +4,15 @@ import { createClient } from "@libsql/client";
 
 dotenv.config();
 
-const runtimeDatabaseUrl = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
+function normalizeEnvValue(value) {
+	if (typeof value !== "string") return value;
+	const trimmed = value.trim();
+	return trimmed.replace(/^['"]|['"]$/g, "");
+}
+
+const runtimeDatabaseUrl = normalizeEnvValue(process.env.TURSO_DATABASE_URL) || normalizeEnvValue(process.env.DATABASE_URL);
 const prismaDatasourceUrl =
-	process.env.PRISMA_DATABASE_URL ||
+	normalizeEnvValue(process.env.PRISMA_DATABASE_URL) ||
 	(runtimeDatabaseUrl?.startsWith("libsql://") ? "file:./dev.db" : runtimeDatabaseUrl || "file:./dev.db");
 
 process.env.PRISMA_DATABASE_URL = prismaDatasourceUrl;
@@ -15,10 +21,14 @@ const { PrismaClient } = await import("@prisma/client");
 
 export function createPrismaClient() {
 	const databaseUrl = runtimeDatabaseUrl;
-	const tursoAuthToken = process.env.TURSO_AUTH_TOKEN;
+	const tursoAuthToken = normalizeEnvValue(process.env.TURSO_AUTH_TOKEN);
 
 	// Use the LibSQL adapter when the URL points to Turso/libsql.
 	if (databaseUrl?.startsWith("libsql://")) {
+		if (!tursoAuthToken) {
+			throw new Error("Missing TURSO_AUTH_TOKEN for libsql connection");
+		}
+
 		const client = createClient({
 			url: databaseUrl,
 			authToken: tursoAuthToken,
