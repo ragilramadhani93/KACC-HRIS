@@ -19,6 +19,10 @@ export function createPrismaClient() {
 		return new PrismaClient({ adapter });
 	}
 
+	if (databaseUrl) {
+		return new PrismaClient({ datasourceUrl: databaseUrl });
+	}
+
 	return new PrismaClient();
 }
 
