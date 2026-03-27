@@ -4,7 +4,7 @@ import { body, validationResult } from "express-validator";
 import { prisma } from "../prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { computeWorkedHours } from "../utils/time.js";
-import { saveBase64Image } from "../utils/files.js";
+import { uploadBase64ImageToR2 } from "../utils/r2.js";
 
 const router = express.Router();
 
@@ -36,7 +36,7 @@ router.post(
     }
 
     const fileName = `${req.user.id}-${Date.now()}.jpg`;
-    const selfiePath = saveBase64Image(photo_base64, process.env.PHOTO_UPLOAD_DIR || "uploads/selfies", fileName);
+    const selfiePath = await uploadBase64ImageToR2(photo_base64, fileName);
 
     const entry = await prisma.timeEntry.create({
       data: {
