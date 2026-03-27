@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { computeWorkedHours, toDateRange } from "../utils/time.js";
 
 const router = express.Router();
+const REVIEWABLE_STATUSES = ["APPROVED", "REJECTED", "SICK_LEAVE", "PERSONAL_LEAVE"];
 
 router.use(requireAuth);
 
@@ -65,7 +66,7 @@ router.put("/:id", requireRole("admin"), async (req, res) => {
 router.put(
   "/:id/approve",
   requireRole("admin"),
-  [body("status").isIn(["APPROVED", "REJECTED"]), body("notes").optional().isString()],
+  [body("status").isIn(REVIEWABLE_STATUSES), body("notes").optional().isString()],
   async (req, res) => {
     const { id } = req.params;
     const { status, notes } = req.body;
@@ -73,7 +74,7 @@ router.put(
     const updated = await prisma.timeEntry.update({
       where: { id },
       data: {
-        status: status === "APPROVED" ? "APPROVED" : "REJECTED",
+        status,
         notes: notes ?? null,
       },
     });

@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { api } from "../lib/api";
 
+type ReviewStatus = "APPROVED" | "REJECTED" | "SICK_LEAVE" | "PERSONAL_LEAVE";
+
 type Entry = {
   id: string;
   clockIn: string;
@@ -32,7 +34,7 @@ export default function TimesheetPage() {
   });
 
   const approve = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: "APPROVED" | "REJECTED" }) =>
+    mutationFn: async ({ id, status }: { id: string; status: ReviewStatus }) =>
       api.put(`/timesheet/${id}/approve`, { status }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["timesheet"] }),
   });
@@ -83,6 +85,12 @@ export default function TimesheetPage() {
                     </button>
                     <button className="btn btn-secondary" onClick={() => approve.mutate({ id: row.id, status: "REJECTED" })}>
                       Reject
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => approve.mutate({ id: row.id, status: "SICK_LEAVE" })}>
+                      Izin Sakit
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => approve.mutate({ id: row.id, status: "PERSONAL_LEAVE" })}>
+                      Keperluan Pribadi
                     </button>
                   </div>
                 </td>
