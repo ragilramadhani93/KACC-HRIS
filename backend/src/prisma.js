@@ -5,10 +5,11 @@ import { createClient } from "@libsql/client";
 dotenv.config();
 
 const runtimeDatabaseUrl = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
+const prismaDatasourceUrl =
+	process.env.PRISMA_DATABASE_URL ||
+	(runtimeDatabaseUrl?.startsWith("libsql://") ? "file:./dev.db" : runtimeDatabaseUrl || "file:./dev.db");
 
-if (runtimeDatabaseUrl?.startsWith("libsql://")) {
-	process.env.DATABASE_URL = "file:./prisma/dev.db";
-}
+process.env.PRISMA_DATABASE_URL = prismaDatasourceUrl;
 
 const { PrismaClient } = await import("@prisma/client");
 
@@ -23,11 +24,14 @@ export function createPrismaClient() {
 			authToken: tursoAuthToken,
 		});
 		const adapter = new PrismaLibSQL(client);
-		return new PrismaClient({ adapter });
+		return new PrismaClient({
+			adapter,
+			datasourceUrl: prismaDatasourceUrl,
+		});
 	}
 
-	if (databaseUrl) {
-		return new PrismaClient({ datasourceUrl: databaseUrl });
+	if (prismaDatasourceUrl) {
+		return new PrismaClient({ datasourceUrl: prismaDatasourceUrl });
 	}
 
 	return new PrismaClient();

@@ -6,9 +6,8 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "vercel-build": "node ./node_modules/prisma/build/index.js generate",
-    "postinstall": "node ./node_modules/prisma/build/index.js generate",
-    "prisma:generate": "node ./node_modules/prisma/build/index.js generate",
+    "vercel-build": "node scripts/prisma-generate.js",
+    "prisma:generate": "node scripts/prisma-generate.js",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "turso:init": "node scripts/init-turso-schema.js",
