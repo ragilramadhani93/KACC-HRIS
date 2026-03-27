@@ -16,10 +16,6 @@ export function createPrismaClient() {
 			authToken: tursoAuthToken,
 		});
 		const adapter = new PrismaLibSQL(client);
-
-		// Prisma still validates the SQLite datasource URL even when an adapter is provided.
-		// Point it at a local SQLite placeholder while the adapter handles the real Turso connection.
-		process.env.DATABASE_URL = "file:./prisma/dev.db";
 		return new PrismaClient({ adapter });
 	}
 
