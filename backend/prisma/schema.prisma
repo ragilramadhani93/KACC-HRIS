@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:/tmp/prisma-placeholder.db"
+  url      = "file:///tmp/prisma-placeholder.db"
 }
 
 model Department {
