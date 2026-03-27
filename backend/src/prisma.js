@@ -24,10 +24,7 @@ export function createPrismaClient() {
 			authToken: tursoAuthToken,
 		});
 		const adapter = new PrismaLibSQL(client);
-		return new PrismaClient({
-			adapter,
-			datasourceUrl: prismaDatasourceUrl,
-		});
+		return new PrismaClient({ adapter });
 	}
 
 	if (prismaDatasourceUrl) {
