@@ -5,6 +5,7 @@ import EmployeesPage from "./pages/employees";
 import LoginPage from "./pages/login";
 import OutletsPage from "./pages/outlets";
 import ReportsPage from "./pages/reports";
+import LeaveRequestPage from "./pages/leave-request";
 import TimesheetPage from "./pages/timesheet";
 import { useAuthStore } from "./store/auth";
 
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="outlets" element={<OutletsPage />} />
         <Route path="timesheet" element={<TimesheetPage />} />
+        <Route path="leave-request" element={<LeaveRequestPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route index element={<Navigate to="/dashboard" replace />} />
       </Route>

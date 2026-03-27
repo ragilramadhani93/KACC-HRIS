@@ -6,6 +6,7 @@ const nav = [
   { to: "/employees", label: "Employees" },
   { to: "/outlets", label: "Outlets & Shifts" },
   { to: "/timesheet", label: "Timesheet" },
+  { to: "/leave-request", label: "Input Izin" },
   { to: "/reports", label: "Reports" },
 ];
 
