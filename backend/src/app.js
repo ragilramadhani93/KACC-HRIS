@@ -60,6 +60,16 @@ app.get("/health/bcrypttest", async (req, res) => {
 	}
 });
 
+app.get("/health/tokentest", async (req, res) => {
+	try {
+		const { signToken } = await import("./utils/jwt.js");
+		const token = signToken({ id: "test-id", role: "admin", email: "admin@company.com" });
+		return res.json({ token: token.substring(0, 30) + "...", length: token.length });
+	} catch (error) {
+		return res.status(500).json({ error: error?.message || String(error) });
+	}
+});
+
 app.get("/health/db", async (req, res) => {
 	const env = {
 		hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
