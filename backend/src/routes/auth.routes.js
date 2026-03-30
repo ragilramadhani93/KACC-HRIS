@@ -2,7 +2,6 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import { body, validationResult } from "express-validator";
 import { createClient } from "@libsql/client";
-import { prisma } from "../prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { signToken } from "../utils/jwt.js";
 
@@ -41,30 +40,6 @@ function getLibsqlClient() {
 
 async function findUserByEmail(email) {
   const normalizedEmail = String(email).trim().toLowerCase();
-
-  try {
-    const user = await withTimeout(
-      prisma.user.findFirst({
-        where: { email: normalizedEmail },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          isActive: true,
-          passwordHash: true,
-        },
-      }),
-      2500,
-      "Prisma login query timed out"
-    );
-
-    if (user) {
-      return user;
-    }
-  } catch (error) {
-    console.warn("Prisma login lookup failed, trying LibSQL fallback", error?.message || error);
-  }
 
   const client = getLibsqlClient();
   if (!client) {
