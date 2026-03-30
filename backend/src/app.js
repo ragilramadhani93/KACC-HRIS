@@ -24,6 +24,13 @@ app.use(morgan("dev"));
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
+app.get("/health/version", (req, res) => {
+	res.json({
+		status: "ok",
+		version: "login-fix-20260330-1",
+	});
+});
+
 app.get("/health/db", async (req, res) => {
 	const env = {
 		hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
