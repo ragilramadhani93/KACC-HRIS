@@ -1,11 +1,14 @@
 import bcrypt from "bcryptjs";
 import dayjs from "dayjs";
-import { PrismaClient } from "@prisma/client";
+import dotenv from "dotenv";
+import { createPrismaClient } from "../src/prisma.js";
+
+dotenv.config();
 
 const UserRole = { admin: "admin", employee: "employee" };
 const EntryStatus = { PENDING: "PENDING", APPROVED: "APPROVED", REJECTED: "REJECTED", PRESENT: "PRESENT", LATE: "LATE", ABSENT: "ABSENT" };
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function seed() {
   await prisma.outletShift.deleteMany();

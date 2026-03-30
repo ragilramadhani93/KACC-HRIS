@@ -14,10 +14,15 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.82",
     "@aws-sdk/client-s3": "^3.1018.0",
     "@libsql/client": "^0.8.1",
     "@prisma/adapter-libsql": "^5.22.0",
     "@prisma/client": "^5.22.0",
+    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow/tfjs-backend-cpu": "^4.22.0",
+    "@tensorflow/tfjs-backend-wasm": "^4.22.0",
+    "@vladmandic/face-api": "^1.7.15",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "csv-stringify": "^6.5.2",

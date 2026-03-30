@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 
 type Shift = {
@@ -17,6 +18,9 @@ type Outlet = {
   code: string;
   name: string;
   address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  radius: number;
   isActive: boolean;
   shifts: Shift[];
 };
@@ -24,8 +28,16 @@ type Outlet = {
 export default function OutletsPage() {
   const queryClient = useQueryClient();
   const [selectedOutletId, setSelectedOutletId] = useState("");
+  const [editingOutletId, setEditingOutletId] = useState<string | null>(null);
 
-  const [outletForm, setOutletForm] = useState({ code: "", name: "", address: "" });
+  const [outletForm, setOutletForm] = useState({
+    code: "",
+    name: "",
+    address: "",
+    latitude: "",
+    longitude: "",
+    radius: "100",
+  });
   const [shiftForm, setShiftForm] = useState({ name: "", startTime: "08:00", endTime: "16:00", isOvernight: false });
 
   const { data: outlets = [] } = useQuery<Outlet[]>({
@@ -41,7 +53,15 @@ export default function OutletsPage() {
   const createOutlet = useMutation({
     mutationFn: async () => api.post("/outlets", outletForm),
     onSuccess: async () => {
-      setOutletForm({ code: "", name: "", address: "" });
+      resetOutletForm();
+      await queryClient.invalidateQueries({ queryKey: ["outlets"] });
+    },
+  });
+
+  const updateOutlet = useMutation({
+    mutationFn: async () => api.put(`/outlets/${editingOutletId}`, outletForm),
+    onSuccess: async () => {
+      resetOutletForm();
       await queryClient.invalidateQueries({ queryKey: ["outlets"] });
     },
   });
@@ -87,7 +107,28 @@ export default function OutletsPage() {
 
   function onSubmitOutlet(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (editingOutletId) {
+      updateOutlet.mutate();
+      return;
+    }
     createOutlet.mutate();
+  }
+
+  function onEditOutlet(outlet: Outlet) {
+    setEditingOutletId(outlet.id);
+    setOutletForm({
+      code: outlet.code,
+      name: outlet.name,
+      address: outlet.address || "",
+      latitude: outlet.latitude !== null ? String(outlet.latitude) : "",
+      longitude: outlet.longitude !== null ? String(outlet.longitude) : "",
+      radius: String(outlet.radius || 100),
+    });
+  }
+
+  function resetOutletForm() {
+    setEditingOutletId(null);
+    setOutletForm({ code: "", name: "", address: "", latitude: "", longitude: "", radius: "100" });
   }
 
   function onSubmitShift(e: FormEvent<HTMLFormElement>) {
@@ -96,12 +137,37 @@ export default function OutletsPage() {
     createShift.mutate(selectedOutlet.id);
   }
 
+  function handleExportOutlets() {
+    const rows = outlets.map((outlet, index) => ({
+      No: index + 1,
+      Code: outlet.code,
+      Name: outlet.name,
+      Address: outlet.address || "",
+      Latitude: outlet.latitude ?? "",
+      Longitude: outlet.longitude ?? "",
+      RadiusMeters: outlet.radius ?? "",
+      GeofenceConfigured: outlet.latitude !== null && outlet.longitude !== null ? "Yes" : "No",
+      ShiftCount: outlet.shifts.length,
+      Status: outlet.isActive ? "Active" : "Inactive",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Outlets");
+    XLSX.writeFile(workbook, `outlets-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
   return (
     <div className="grid gap-4 xl:grid-cols-[1.05fr_1fr]">
       <section className="space-y-4">
         <div className="card">
-          <h3 className="mb-3 text-lg font-semibold">Outlet Management</h3>
-          <form className="grid gap-3 md:grid-cols-4" onSubmit={onSubmitOutlet}>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-lg font-semibold">{editingOutletId ? "Edit Outlet" : "Outlet Management"}</h3>
+            <button className="btn btn-secondary" onClick={handleExportOutlets} type="button">
+              Export Excel
+            </button>
+          </div>
+          <form className="grid gap-3 md:grid-cols-3" onSubmit={onSubmitOutlet}>
             <input
               className="input"
               placeholder="Code (JKT-01)"
@@ -122,10 +188,47 @@ export default function OutletsPage() {
               value={outletForm.address}
               onChange={(e) => setOutletForm((prev) => ({ ...prev, address: e.target.value }))}
             />
-            <button className="btn btn-primary" disabled={createOutlet.isPending} type="submit">
-              {createOutlet.isPending ? "Saving..." : "Add Outlet"}
+            <input
+              className="input"
+              type="number"
+              step="any"
+              placeholder="Latitude (-6.2088)"
+              value={outletForm.latitude}
+              onChange={(e) => setOutletForm((prev) => ({ ...prev, latitude: e.target.value }))}
+            />
+            <input
+              className="input"
+              type="number"
+              step="any"
+              placeholder="Longitude (106.8456)"
+              value={outletForm.longitude}
+              onChange={(e) => setOutletForm((prev) => ({ ...prev, longitude: e.target.value }))}
+            />
+            <input
+              className="input"
+              type="number"
+              min={10}
+              max={5000}
+              placeholder="Radius (meter)"
+              value={outletForm.radius}
+              onChange={(e) => setOutletForm((prev) => ({ ...prev, radius: e.target.value }))}
+            />
+            <button className="btn btn-primary" disabled={createOutlet.isPending || updateOutlet.isPending} type="submit">
+              {createOutlet.isPending || updateOutlet.isPending
+                ? "Saving..."
+                : editingOutletId
+                  ? "Update Outlet"
+                  : "Add Outlet"}
             </button>
+            {editingOutletId ? (
+              <button className="btn btn-secondary" type="button" onClick={resetOutletForm}>
+                Cancel Edit
+              </button>
+            ) : null}
           </form>
+          <p className="mt-2 text-xs text-slate-500">
+            Isi latitude, longitude, dan radius untuk mengaktifkan geofence outlet.
+          </p>
         </div>
 
         <div className="card overflow-x-auto">
@@ -135,6 +238,7 @@ export default function OutletsPage() {
                 <th className="p-2">Code</th>
                 <th className="p-2">Outlet</th>
                 <th className="p-2">Address</th>
+                <th className="p-2">Geofence</th>
                 <th className="p-2">Status</th>
                 <th className="p-2">Action</th>
               </tr>
@@ -149,9 +253,23 @@ export default function OutletsPage() {
                   <td className="p-2 font-medium">{outlet.code}</td>
                   <td className="p-2">{outlet.name}</td>
                   <td className="p-2">{outlet.address || "-"}</td>
+                  <td className="p-2">
+                    {outlet.latitude !== null && outlet.longitude !== null
+                      ? `${outlet.latitude.toFixed(6)}, ${outlet.longitude.toFixed(6)} (${outlet.radius}m)`
+                      : "Belum diset"}
+                  </td>
                   <td className="p-2">{outlet.isActive ? "Active" : "Inactive"}</td>
                   <td className="p-2">
                     <div className="flex gap-2">
+                      <button
+                        className="btn btn-secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditOutlet(outlet);
+                        }}
+                      >
+                        Edit
+                      </button>
                       <button
                         className="btn btn-secondary"
                         onClick={(e) => {
@@ -176,7 +294,7 @@ export default function OutletsPage() {
               ))}
               {outlets.length === 0 ? (
                 <tr>
-                  <td className="p-4 text-slate-500" colSpan={5}>
+                  <td className="p-4 text-slate-500" colSpan={6}>
                     No outlets found.
                   </td>
                 </tr>

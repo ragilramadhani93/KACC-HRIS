@@ -4,11 +4,26 @@ import { randomUUID } from "crypto";
 import { body, validationResult } from "express-validator";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { computeDescriptorFromImage, serializeDescriptor } from "../utils/face-recognition.js";
 import { uploadImageToR2 } from "../utils/r2.js";
 
 const router = express.Router();
 
 router.use(requireAuth, requireRole("admin"));
+
+async function computeFaceDescriptor(imageSource) {
+  if (!imageSource) {
+    return null;
+  }
+
+  try {
+    const descriptor = await computeDescriptorFromImage(imageSource);
+    return descriptor ? serializeDescriptor(descriptor) : null;
+  } catch (error) {
+    console.error("Failed to compute face descriptor", error);
+    return null;
+  }
+}
 
 async function uploadEmployeePhotos({ avatarUrl, ktpPhotoUrl }, employeeKey) {
   const [uploadedAvatarUrl, uploadedKtpPhotoUrl] = await Promise.all([
@@ -83,6 +98,7 @@ router.post(
       { avatarUrl, ktpPhotoUrl },
       `employee-${Date.now()}-${randomUUID()}`
     );
+    const faceDescriptor = await computeFaceDescriptor(photoFields.avatarUrl);
 
     const user = await prisma.user.create({
       data: {
@@ -94,6 +110,7 @@ router.post(
         position: position ?? null,
         hourlyRate: hourlyRate ?? null,
         avatarUrl: photoFields.avatarUrl,
+        faceDescriptor,
         address: address ?? null,
         phoneNumber: phoneNumber ?? null,
         bank: bank ?? null,
@@ -114,10 +131,17 @@ router.put("/:id", async (req, res) => {
   const { id } = req.params;
   const payload = req.body;
   const passwordHash = payload.password ? await bcrypt.hash(payload.password, 10) : undefined;
+  const existingUser = await prisma.user.findUnique({
+    where: { id },
+    select: { avatarUrl: true },
+  });
   const photoFields = await uploadEmployeePhotos(
     { avatarUrl: payload.avatarUrl, ktpPhotoUrl: payload.ktpPhotoUrl },
     `employee-${id}-${Date.now()}`
   );
+  const shouldRecomputeDescriptor = Object.prototype.hasOwnProperty.call(payload, "avatarUrl");
+  const nextAvatarUrl = shouldRecomputeDescriptor ? photoFields.avatarUrl : existingUser?.avatarUrl ?? null;
+  const faceDescriptor = shouldRecomputeDescriptor ? await computeFaceDescriptor(nextAvatarUrl) : undefined;
 
   const updated = await prisma.user.update({
     where: { id },
@@ -128,6 +152,7 @@ router.put("/:id", async (req, res) => {
       position: payload.position ?? null,
       hourlyRate: payload.hourlyRate ?? null,
       avatarUrl: photoFields.avatarUrl,
+      ...(faceDescriptor !== undefined ? { faceDescriptor } : {}),
       address: payload.address ?? null,
       phoneNumber: payload.phoneNumber ?? null,
       bank: payload.bank ?? null,

@@ -30,6 +30,7 @@ model User {
   position          String?
   hourlyRate        Decimal?         @map("hourly_rate")
   avatarUrl         String?          @map("avatar_url")
+  faceDescriptor    String?          @map("face_descriptor")
   fcmToken          String?          @map("fcm_token")
   isActive          Boolean          @default(true) @map("is_active")
   address           String?
