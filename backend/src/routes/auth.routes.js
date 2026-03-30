@@ -27,9 +27,8 @@ router.post(
       }
 
       const { email, password } = req.body;
-      const user = await withTimeout(
-        prisma.user.findFirst({
-          where: { email },
+      const users = await withTimeout(
+        prisma.user.findMany({
           select: {
             id: true,
             name: true,
@@ -38,10 +37,14 @@ router.post(
             isActive: true,
             passwordHash: true,
           },
+          take: 500,
         }),
         10000,
         "Database query timed out"
       );
+
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const user = users.find((item) => String(item.email || "").trim().toLowerCase() === normalizedEmail);
 
       if (!user || !user.isActive) {
         return res.status(401).json({ message: "Invalid credentials" });
