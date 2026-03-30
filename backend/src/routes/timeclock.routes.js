@@ -3,12 +3,13 @@ import dayjs from "dayjs";
 import { body, validationResult } from "express-validator";
 import { prisma } from "../prisma.js";
 import { requireAuth } from "../middleware/auth.js";
-import {
-  computeDescriptorFromImage,
-  euclideanDistance,
-  parseDescriptor,
-  serializeDescriptor,
-} from "../utils/face-recognition.js";
+// face-recognition is loaded lazily to avoid crashing Vercel serverless on cold start
+// (@napi-rs/canvas is a native module that must NOT be required at module init time)
+let _fr = null;
+async function getFR() {
+  if (!_fr) _fr = await import("../utils/face-recognition.js");
+  return _fr;
+}
 import { isWithinGeofence } from "../utils/geofence.js";
 import { computeWorkedHours } from "../utils/time.js";
 import { uploadBase64ImageToR2 } from "../utils/r2.js";
@@ -35,6 +36,8 @@ async function getUserActiveEntry(userId) {
 }
 
 async function ensureUserDescriptor(user) {
+  const { parseDescriptor, serializeDescriptor, computeDescriptorFromImage } = await getFR();
+
   const cached = parseDescriptor(user.faceDescriptor);
   if (cached) {
     return cached;
@@ -123,6 +126,7 @@ router.post(
     }
 
     const { photo_base64: photoBase64, latitude, longitude, address } = req.body;
+    const { computeDescriptorFromImage, euclideanDistance } = await getFR();
     const targetDescriptor = await computeDescriptorFromImage(photoBase64);
 
     if (!targetDescriptor) {

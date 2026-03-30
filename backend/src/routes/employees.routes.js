@@ -4,7 +4,6 @@ import { randomUUID } from "crypto";
 import { body, validationResult } from "express-validator";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { computeDescriptorFromImage, serializeDescriptor } from "../utils/face-recognition.js";
 import { uploadImageToR2 } from "../utils/r2.js";
 
 const router = express.Router();
@@ -17,6 +16,8 @@ async function computeFaceDescriptor(imageSource) {
   }
 
   try {
+    // Lazy-load to avoid crashing Vercel serverless at cold start (@napi-rs/canvas native module)
+    const { computeDescriptorFromImage, serializeDescriptor } = await import("../utils/face-recognition.js");
     const descriptor = await computeDescriptorFromImage(imageSource);
     return descriptor ? serializeDescriptor(descriptor) : null;
   } catch (error) {
