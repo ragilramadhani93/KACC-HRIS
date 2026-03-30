@@ -1,12 +1,32 @@
 import express from "express";
 import bcrypt from "bcryptjs";
+import { randomUUID } from "crypto";
 import { body, validationResult } from "express-validator";
 import { prisma } from "../prisma.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { uploadImageToR2 } from "../utils/r2.js";
 
 const router = express.Router();
 
 router.use(requireAuth, requireRole("admin"));
+
+async function uploadEmployeePhotos({ avatarUrl, ktpPhotoUrl }, employeeKey) {
+  const [uploadedAvatarUrl, uploadedKtpPhotoUrl] = await Promise.all([
+    uploadImageToR2(avatarUrl, {
+      folder: "employees/avatars",
+      fileName: `${employeeKey}-avatar`,
+    }),
+    uploadImageToR2(ktpPhotoUrl, {
+      folder: "employees/ktp",
+      fileName: `${employeeKey}-ktp`,
+    }),
+  ]);
+
+  return {
+    avatarUrl: uploadedAvatarUrl ?? null,
+    ktpPhotoUrl: uploadedKtpPhotoUrl ?? null,
+  };
+}
 
 router.get("/", async (req, res) => {
   const { q, departmentId } = req.query;
@@ -59,6 +79,10 @@ router.post(
     } = req.body;
 
     const passwordHash = await bcrypt.hash(password, 10);
+    const photoFields = await uploadEmployeePhotos(
+      { avatarUrl, ktpPhotoUrl },
+      `employee-${Date.now()}-${randomUUID()}`
+    );
 
     const user = await prisma.user.create({
       data: {
@@ -69,13 +93,13 @@ router.post(
         departmentId: departmentId ?? null,
         position: position ?? null,
         hourlyRate: hourlyRate ?? null,
-        avatarUrl: avatarUrl ?? null,
+        avatarUrl: photoFields.avatarUrl,
         address: address ?? null,
         phoneNumber: phoneNumber ?? null,
         bank: bank ?? null,
         accountNumber: accountNumber ?? null,
         emergencyContact: emergencyContact ?? null,
-        ktpPhotoUrl: ktpPhotoUrl ?? null,
+        ktpPhotoUrl: photoFields.ktpPhotoUrl,
         outletId: outletId ?? null,
         isActive,
       },
@@ -89,6 +113,11 @@ router.post(
 router.put("/:id", async (req, res) => {
   const { id } = req.params;
   const payload = req.body;
+  const passwordHash = payload.password ? await bcrypt.hash(payload.password, 10) : undefined;
+  const photoFields = await uploadEmployeePhotos(
+    { avatarUrl: payload.avatarUrl, ktpPhotoUrl: payload.ktpPhotoUrl },
+    `employee-${id}-${Date.now()}`
+  );
 
   const updated = await prisma.user.update({
     where: { id },
@@ -98,15 +127,16 @@ router.put("/:id", async (req, res) => {
       departmentId: payload.departmentId ?? null,
       position: payload.position ?? null,
       hourlyRate: payload.hourlyRate ?? null,
-      avatarUrl: payload.avatarUrl ?? null,
+      avatarUrl: photoFields.avatarUrl,
       address: payload.address ?? null,
       phoneNumber: payload.phoneNumber ?? null,
       bank: payload.bank ?? null,
       accountNumber: payload.accountNumber ?? null,
       emergencyContact: payload.emergencyContact ?? null,
-      ktpPhotoUrl: payload.ktpPhotoUrl ?? null,
+      ktpPhotoUrl: photoFields.ktpPhotoUrl,
       outletId: payload.outletId ?? null,
       isActive: payload.isActive,
+      ...(passwordHash ? { passwordHash } : {}),
     },
     include: { department: true, outlet: true },
   });
