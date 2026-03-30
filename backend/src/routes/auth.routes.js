@@ -20,24 +20,22 @@ async function findUserByEmail(email) {
   const normalizedEmail = String(email).trim().toLowerCase();
 
   const user = await withTimeout(
-    prisma.$queryRaw`SELECT id, name, email, role, is_active AS "isActive", password_hash AS "passwordHash" FROM users WHERE lower(email) = ${normalizedEmail} LIMIT 1`,
+    prisma.user.findFirst({
+      where: { email: normalizedEmail },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        passwordHash: true,
+      },
+    }),
     8000,
     "Login query timed out"
   );
 
-  const row = Array.isArray(user) ? user[0] : null;
-  if (!row) {
-    return null;
-  }
-
-  return {
-    id: String(row.id),
-    name: row.name ? String(row.name) : "",
-    email: row.email ? String(row.email) : normalizedEmail,
-    role: row.role ? String(row.role) : "employee",
-    isActive: row.isActive === true || row.isActive === 1 || row.isActive === "1",
-    passwordHash: row.passwordHash ? String(row.passwordHash) : "",
-  };
+  return user ?? null;
 }
 
 router.post(
