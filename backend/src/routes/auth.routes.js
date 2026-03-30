@@ -1,7 +1,7 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import { body, validationResult } from "express-validator";
-import { createClient } from "@libsql/client";
+import { prisma } from "../prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { signToken } from "../utils/jwt.js";
 
@@ -16,46 +16,16 @@ function withTimeout(promise, ms, message) {
   ]);
 }
 
-let libsqlClient = null;
-
-function getLibsqlClient() {
-  if (libsqlClient) {
-    return libsqlClient;
-  }
-
-  const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
-  const authToken = process.env.TURSO_AUTH_TOKEN;
-
-  if (!url || !url.startsWith("libsql://")) {
-    return null;
-  }
-
-  libsqlClient = createClient({
-    url,
-    authToken,
-  });
-
-  return libsqlClient;
-}
-
 async function findUserByEmail(email) {
   const normalizedEmail = String(email).trim().toLowerCase();
 
-  const client = getLibsqlClient();
-  if (!client) {
-    return null;
-  }
-
-  const result = await withTimeout(
-    client.execute({
-      sql: 'SELECT id, name, email, role, is_active as isActive, password_hash as passwordHash FROM users WHERE lower(email) = ? LIMIT 1',
-      args: [normalizedEmail],
-    }),
-    5000,
-    "LibSQL login query timed out"
+  const user = await withTimeout(
+    prisma.$queryRaw`SELECT id, name, email, role, is_active AS "isActive", password_hash AS "passwordHash" FROM users WHERE lower(email) = ${normalizedEmail} LIMIT 1`,
+    8000,
+    "Login query timed out"
   );
 
-  const row = result?.rows?.[0];
+  const row = Array.isArray(user) ? user[0] : null;
   if (!row) {
     return null;
   }
