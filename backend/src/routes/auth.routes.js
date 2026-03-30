@@ -82,7 +82,7 @@ router.post(
       });
     } catch (error) {
       console.error("Login failed", error);
-      return res.status(503).json({ message: "Authentication service unavailable" });
+      return res.status(503).json({ message: "Authentication service unavailable", detail: error?.message || String(error) });
     }
   }
 );

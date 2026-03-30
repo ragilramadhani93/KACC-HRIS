@@ -35,9 +35,9 @@ app.get("/health/usercheck", async (req, res) => {
 	try {
 		const user = await prisma.user.findFirst({
 			where: { email: "admin@company.com" },
-			select: { id: true, email: true, role: true, isActive: true },
+			select: { id: true, email: true, role: true, isActive: true, passwordHash: true },
 		});
-		return res.json({ found: !!user, user: user ? { id: user.id, email: user.email, role: user.role, isActive: user.isActive } : null });
+		return res.json({ found: !!user, hasHash: !!(user?.passwordHash), isActive: user?.isActive });
 	} catch (error) {
 		return res.status(500).json({ error: error?.message || String(error) });
 	}
