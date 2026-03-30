@@ -30,7 +30,6 @@ router.post(
       }
 
       // Step 2: Compare password
-      const { default: bcrypt } = await import("bcryptjs");
       const ok = await bcrypt.compare(password, user.passwordHash);
 
       if (!ok) {
@@ -38,7 +37,6 @@ router.post(
       }
 
       // Step 3: Sign token
-      const { signToken } = await import("../utils/jwt.js");
       const token = signToken(user);
 
       // Step 4: Return result
@@ -46,9 +44,9 @@ router.post(
         token,
         user: {
           id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
+          name: user.name || "",
+          email: user.email || "",
+          role: user.role || "employee",
         },
       });
     } catch (error) {
