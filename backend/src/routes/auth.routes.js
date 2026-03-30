@@ -48,7 +48,7 @@ async function findUserByEmail(email) {
 
   const result = await withTimeout(
     client.execute({
-      sql: 'SELECT id, name, email, role, isActive, passwordHash FROM "User" WHERE lower(email) = ? LIMIT 1',
+      sql: 'SELECT id, name, email, role, is_active as isActive, password_hash as passwordHash FROM users WHERE lower(email) = ? LIMIT 1',
       args: [normalizedEmail],
     }),
     5000,
