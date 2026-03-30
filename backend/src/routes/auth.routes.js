@@ -28,7 +28,7 @@ router.post(
 
       const { email, password } = req.body;
       const user = await withTimeout(
-        prisma.user.findUnique({
+        prisma.user.findFirst({
           where: { email },
           select: {
             id: true,
