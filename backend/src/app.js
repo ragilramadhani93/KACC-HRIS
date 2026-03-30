@@ -43,6 +43,23 @@ app.get("/health/usercheck", async (req, res) => {
 	}
 });
 
+app.get("/health/bcrypttest", async (req, res) => {
+	try {
+		const { default: bcrypt } = await import("bcryptjs");
+		const user = await prisma.user.findFirst({
+			where: { email: "admin@company.com" },
+			select: { passwordHash: true },
+		});
+		if (!user?.passwordHash) {
+			return res.json({ error: "No hash found" });
+		}
+		const match = await bcrypt.compare("Admin123!", user.passwordHash);
+		return res.json({ hashPresent: true, passwordMatch: match });
+	} catch (error) {
+		return res.status(500).json({ error: error?.message || String(error) });
+	}
+});
+
 app.get("/health/db", async (req, res) => {
 	const env = {
 		hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
