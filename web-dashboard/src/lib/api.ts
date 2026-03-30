@@ -12,3 +12,21 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const url = String(error?.config?.url || "");
+
+    if (status === 401 && !url.includes("/auth/login")) {
+      useAuthStore.getState().logout();
+
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login?reason=session-expired";
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
