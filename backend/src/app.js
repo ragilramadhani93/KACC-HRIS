@@ -31,6 +31,18 @@ app.get("/health/version", (req, res) => {
 	});
 });
 
+app.get("/health/usercheck", async (req, res) => {
+	try {
+		const user = await prisma.user.findFirst({
+			where: { email: "admin@company.com" },
+			select: { id: true, email: true, role: true, isActive: true },
+		});
+		return res.json({ found: !!user, user: user ? { id: user.id, email: user.email, role: user.role, isActive: user.isActive } : null });
+	} catch (error) {
+		return res.status(500).json({ error: error?.message || String(error) });
+	}
+});
+
 app.get("/health/db", async (req, res) => {
 	const env = {
 		hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
