@@ -1,6 +1,7 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import { body, validationResult } from "express-validator";
+import { createClient } from "@libsql/client";
 import { prisma } from "../prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { signToken } from "../utils/jwt.js";
@@ -16,6 +17,84 @@ function withTimeout(promise, ms, message) {
   ]);
 }
 
+let libsqlClient = null;
+
+function getLibsqlClient() {
+  if (libsqlClient) {
+    return libsqlClient;
+  }
+
+  const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+
+  if (!url || !url.startsWith("libsql://")) {
+    return null;
+  }
+
+  libsqlClient = createClient({
+    url,
+    authToken,
+  });
+
+  return libsqlClient;
+}
+
+async function findUserByEmail(email) {
+  const normalizedEmail = String(email).trim().toLowerCase();
+
+  try {
+    const user = await withTimeout(
+      prisma.user.findFirst({
+        where: { email: normalizedEmail },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+          passwordHash: true,
+        },
+      }),
+      2500,
+      "Prisma login query timed out"
+    );
+
+    if (user) {
+      return user;
+    }
+  } catch (error) {
+    console.warn("Prisma login lookup failed, trying LibSQL fallback", error?.message || error);
+  }
+
+  const client = getLibsqlClient();
+  if (!client) {
+    return null;
+  }
+
+  const result = await withTimeout(
+    client.execute({
+      sql: 'SELECT id, name, email, role, isActive, passwordHash FROM "User" WHERE lower(email) = ? LIMIT 1',
+      args: [normalizedEmail],
+    }),
+    5000,
+    "LibSQL login query timed out"
+  );
+
+  const row = result?.rows?.[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: String(row.id),
+    name: row.name ? String(row.name) : "",
+    email: row.email ? String(row.email) : normalizedEmail,
+    role: row.role ? String(row.role) : "employee",
+    isActive: row.isActive === true || row.isActive === 1 || row.isActive === "1",
+    passwordHash: row.passwordHash ? String(row.passwordHash) : "",
+  };
+}
+
 router.post(
   "/login",
   [body("email").isEmail(), body("password").isLength({ min: 6 })],
@@ -27,24 +106,7 @@ router.post(
       }
 
       const { email, password } = req.body;
-      const users = await withTimeout(
-        prisma.user.findMany({
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-            isActive: true,
-            passwordHash: true,
-          },
-          take: 500,
-        }),
-        10000,
-        "Database query timed out"
-      );
-
-      const normalizedEmail = String(email).trim().toLowerCase();
-      const user = users.find((item) => String(item.email || "").trim().toLowerCase() === normalizedEmail);
+      const user = await findUserByEmail(email);
 
       if (!user || !user.isActive) {
         return res.status(401).json({ message: "Invalid credentials" });
